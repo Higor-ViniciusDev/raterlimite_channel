@@ -2,37 +2,44 @@ package strategy_usecase
 
 import (
 	"context"
-
-	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/entity/request_info_entity"
-	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/internal_error"
-	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/usecase/expire_usecase"
+	"errors"
+	"os"
+	"strconv"
+	"time"
 )
 
 type IPStrategyUsecase struct {
-	Expirer     expire_usecase.ExpirerInterface
-	RequestInfo request_info_entity.RequestRepository
+	limitIP int64
+	window  time.Duration
 }
 
-func NewIPStrategyUsecase(expire expire_usecase.ExpirerInterface, requestRepo request_info_entity.RequestRepository) *IPStrategyUsecase {
+func NewIPStrategyUsecase() *IPStrategyUsecase {
+
+	limitStr := os.Getenv("REQUEST_PER_SECOND_IP")
+	ttlStr := os.Getenv("TIME_UNLOCKED_NEW_REQUEST_IP")
+
+	limit, _ := strconv.ParseInt(limitStr, 10, 64)
+	ttl, _ := strconv.Atoi(ttlStr)
+
 	return &IPStrategyUsecase{
-		Expirer:     expire,
-		RequestInfo: requestRepo,
+		limitIP: limit,
+		window:  time.Duration(ttl) * time.Second,
 	}
 }
 
-// Validate implementa a interface Strategy para validação por IP
-func (ts *IPStrategyUsecase) Validate(ctx context.Context, key string) *internal_error.InternalError {
-	// Verifica se o IP foi bloqueado
-	blocked := ts.Expirer.IsExpired(key)
+func (s *IPStrategyUsecase) GenerateKey(ctx context.Context, key string) (string, error) {
 
-	if blocked {
-		return internal_error.NewInternalServerError("IP address is rate limited")
+	if key == "" {
+		return "", errors.New("ip not found")
 	}
 
-	// Salva a informação da requisição
-	if err := ts.RequestInfo.Save(ctx, key, request_info_entity.Active, request_info_entity.FONTE_IP); err != nil {
-		return err
-	}
+	return "ip:" + key, nil
+}
 
-	return nil
+func (s *IPStrategyUsecase) Limit() int64 {
+	return s.limitIP
+}
+
+func (s *IPStrategyUsecase) Window() time.Duration {
+	return s.window
 }

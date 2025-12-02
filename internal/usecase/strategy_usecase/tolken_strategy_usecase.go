@@ -2,46 +2,53 @@ package strategy_usecase
 
 import (
 	"context"
+	"errors"
+	"os"
+	"strconv"
+	"time"
 
-	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/entity/request_info_entity"
 	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/entity/tolken_entity"
-	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/internal_error"
-	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/usecase/expire_usecase"
 )
 
-type TolkenStrategyUsecase struct {
-	Expirer          expire_usecase.ExpirerInterface
-	TolkenRepository tolken_entity.TolkenRepositoryInterface
-	RequestInfo      request_info_entity.RequestRepository
+type TokenStrategyUsecase struct {
+	tokenRepo tolken_entity.TolkenRepositoryInterface
+
+	limitTok int64
+	window   time.Duration
 }
 
-func NewTolkenStrategyUsecase(expire expire_usecase.ExpirerInterface, tolkenRepository tolken_entity.TolkenRepositoryInterface, requestInfo request_info_entity.RequestRepository) *TolkenStrategyUsecase {
-	return &TolkenStrategyUsecase{
-		Expirer:          expire,
-		TolkenRepository: tolkenRepository,
-		RequestInfo:      requestInfo,
+func NewTokenStrategyUsecase(tokenRepo tolken_entity.TolkenRepositoryInterface) *TokenStrategyUsecase {
+	limitStr := os.Getenv("REQUEST_PER_SECOND_TOLKEN")
+	ttlStr := os.Getenv("TIME_UNLOCKED_NEW_REQUEST_TOLKEN")
+
+	limit, _ := strconv.ParseInt(limitStr, 10, 64)
+	ttl, _ := strconv.Atoi(ttlStr)
+
+	return &TokenStrategyUsecase{
+		tokenRepo: tokenRepo,
+		limitTok:  limit,
+		window:    time.Duration(ttl) * time.Second,
 	}
 }
 
-func (ts *TolkenStrategyUsecase) Validate(ctx context.Context, key string) *internal_error.InternalError {
-	// Verifica se o token é válido
-	isValid := ts.TolkenRepository.ValidateTolken(ctx, key)
+func (s *TokenStrategyUsecase) GenerateKey(ctx context.Context, key string) (string, error) {
 
-	if !isValid {
-		return internal_error.NewInternalServerError("Invalid or expired token")
+	if key == "" {
+		return "", errors.New("token not provided")
 	}
 
-	// Verifica se o token foi bloqueado pelo rate limiter
-	blocked := ts.Expirer.IsExpired(key)
-
-	if blocked {
-		return internal_error.NewInternalServerError("Token is rate limited")
+	// valida se token existe no redis (sem regras complexas)
+	if !s.tokenRepo.ValidateTolken(ctx, key) {
+		return "", errors.New("invalid or expired token")
 	}
 
-	// Salva a informação da requisição
-	if err := ts.RequestInfo.Save(ctx, key, request_info_entity.Active, request_info_entity.FONTE_TOLKEN); err != nil {
-		return err
-	}
+	return "token:" + key, nil
+}
 
-	return nil
+func (s *TokenStrategyUsecase) Limit() int64 {
+	return s.limitTok
+}
+
+func (s *TokenStrategyUsecase) Window() time.Duration {
+	return s.window
 }
