@@ -20,8 +20,6 @@ import (
 func Test_RateLimiterMiddleware_IP(t *testing.T) {
 	os.Setenv("TIME_UNLOCKED_NEW_REQUEST_IP", "1")
 	os.Setenv("REQUEST_PER_SECOND_IP", "7")
-	// os.Setenv("", "")
-	// os.Setenv("", "")
 
 	mr, _ := miniredis.Run()
 	redisClient := redis.NewClient(&redis.Options{Addr: mr.Addr()})
@@ -116,16 +114,5 @@ func Test_RateLimiterMiddleware_IP(t *testing.T) {
 
 	if success+blocked != int32(numRequests) {
 		t.Logf("AVISO: Nem todas as requisições foram contabilizadas (sucesso+bloqueadas: %d, total: %d)", success+blocked, numRequests)
-	}
-
-	// Verifica proporção esperada: ~50% de sucesso, ~50% de bloqueio
-	successRate := float64(success) / float64(numRequests)
-	blockRate := float64(blocked) / float64(numRequests)
-
-	t.Logf("Taxa de sucesso: %.1f%%", successRate*100)
-	t.Logf("Taxa de bloqueio: %.1f%%", blockRate*100)
-
-	if successRate < 0.2 || successRate > 0.8 {
-		t.Logf("AVISO: Taxa de sucesso fora do esperado (20-80%%)")
 	}
 }
