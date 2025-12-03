@@ -10,17 +10,17 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type TolkenDB struct {
+type TolkenRepository struct {
 	RediDB *redis.Client
 }
 
-func NewTolkenDB(redisCli *redis.Client) *TolkenDB {
-	return &TolkenDB{
+func NewTolkenDB(redisCli *redis.Client) *TolkenRepository {
+	return &TolkenRepository{
 		RediDB: redisCli,
 	}
 }
 
-func (tb *TolkenDB) Save(ctx context.Context, tolken *tolken_entity.Tolken) *internal_error.InternalError {
+func (tb *TolkenRepository) Save(ctx context.Context, tolken *tolken_entity.Tolken) *internal_error.InternalError {
 	tolkenID, _ := tolken.GetTolkenString()
 	// Converter struct para map (Redis não aceita struct)
 	data := map[string]interface{}{
@@ -37,7 +37,7 @@ func (tb *TolkenDB) Save(ctx context.Context, tolken *tolken_entity.Tolken) *int
 	return nil
 }
 
-func (tb *TolkenDB) ValidateTolken(ctx context.Context, tolkenID string) bool {
+func (tb *TolkenRepository) ValidateTolken(ctx context.Context, tolkenID string) bool {
 	exists, err := tb.RediDB.Exists(ctx, tolkenID).Result()
 
 	if err != nil {
@@ -51,7 +51,7 @@ func (tb *TolkenDB) ValidateTolken(ctx context.Context, tolkenID string) bool {
 	return false
 }
 
-func (tb *TolkenDB) DeleteInfoByTolken(ctx context.Context, tolkenID string) *internal_error.InternalError {
+func (tb *TolkenRepository) DeleteInfoByTolken(ctx context.Context, tolkenID string) *internal_error.InternalError {
 	err := tb.RediDB.Del(ctx, tolkenID).Err()
 	if err != nil {
 		logger.Error("Error try delete hkey in redis", err)

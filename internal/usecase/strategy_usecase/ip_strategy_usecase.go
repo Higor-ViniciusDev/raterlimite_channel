@@ -2,10 +2,11 @@ package strategy_usecase
 
 import (
 	"context"
-	"errors"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/internal_error"
 )
 
 type IPStrategyUsecase struct {
@@ -30,16 +31,16 @@ func NewIPStrategyUsecase() *IPStrategyUsecase {
 func (s *IPStrategyUsecase) GenerateKey(ctx context.Context, key string) (string, error) {
 
 	if key == "" {
-		return "", errors.New("ip not found")
+		return "", internal_error.NewBadRequestError("key invalid")
 	}
 
 	return "ip:" + key, nil
 }
 
-func (s *IPStrategyUsecase) Limit() int64 {
+func (s *IPStrategyUsecase) GetLimit() int64 {
 	return s.limitIP
 }
 
-func (s *IPStrategyUsecase) Window() time.Duration {
+func (s *IPStrategyUsecase) GetTTL() time.Duration {
 	return s.window
 }

@@ -45,10 +45,10 @@ func (s *TokenStrategyUsecase) GenerateKey(ctx context.Context, key string) (str
 	return "token:" + key, nil
 }
 
-func (s *TokenStrategyUsecase) Limit() int64 {
+func (s *TokenStrategyUsecase) GetLimit() int64 {
 	return s.limitTok
 }
 
-func (s *TokenStrategyUsecase) Window() time.Duration {
+func (s *TokenStrategyUsecase) GetTTL() time.Duration {
 	return s.window
 }

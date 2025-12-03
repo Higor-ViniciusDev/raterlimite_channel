@@ -1,84 +1,121 @@
 package ratelimiter
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"time"
 )
 
 type RateLimitMessage struct {
+	Ctx       context.Context
 	Key       string
+	Limit     int64
+	TTL       time.Duration
+	Strategy  interface{}
 	ReplyChan chan error
 }
 
+// Counter guarda o contador em memória.
 type Counter struct {
 	Count int64
 }
 
 type RateLimiter struct {
 	InputChan chan RateLimitMessage
-	TTL       time.Duration
-	Limit     int64
 	workers   int
 
 	mu       sync.Mutex
 	requests map[string]*Counter
+	closed   chan struct{}
 }
 
-func NewRateLimiter(workers int, ttl time.Duration, limit int64) *RateLimiter {
-	rl := &RateLimiter{
-		workers:   workers,
-		TTL:       ttl,
-		Limit:     limit,
-		requests:  make(map[string]*Counter),
-		InputChan: make(chan RateLimitMessage, 10000),
+func NewRateLimiter(workers int, queueSize int) *RateLimiter {
+	if workers <= 0 {
+		workers = 2
 	}
 
-	for range workers {
+	if queueSize <= 0 {
+		queueSize = 1000
+	}
+
+	rl := &RateLimiter{
+		workers:   workers,
+		InputChan: make(chan RateLimitMessage, queueSize),
+		requests:  make(map[string]*Counter),
+		closed:    make(chan struct{}),
+	}
+
+	for range rl.workers {
 		go rl.worker()
 	}
 
 	return rl
 }
 
+// Stop fecha o rate limiter (fecha o canal de entrada).
+func (rl *RateLimiter) Stop() {
+	close(rl.closed)
+	close(rl.InputChan)
+}
+
 func (rl *RateLimiter) worker() {
 	for msg := range rl.InputChan {
+		// se o rate limiter estiver sendo fechado, tenta sair
+		select {
+		case <-rl.closed:
+			// devolve erro para quem enviou, se aplicável
+			select {
+			case msg.ReplyChan <- errors.New("rate limiter shutting down"):
+			default:
+			}
+			return
+		default:
+		}
+
 		rl.mu.Lock()
 
 		counter, exists := rl.requests[msg.Key]
-
 		if !exists {
-			counter = &Counter{Count: 0}
+			counter = &Counter{
+				Count: 0,
+			}
 			rl.requests[msg.Key] = counter
 
-			// TTL automático limpa o contador
-			go func(key string) {
-				<-time.After(rl.TTL)
-				rl.mu.Lock()
-				delete(rl.requests, key)
-				rl.mu.Unlock()
-			}(msg.Key)
+			// TTL: ao criar o contador, agenda limpeza após msg.TTL
+			go func(key string, ttl time.Duration) {
+				// timer local para limpeza
+				timer := time.NewTimer(ttl)
+				select {
+				case <-timer.C:
+					rl.mu.Lock()
+					delete(rl.requests, key)
+					rl.mu.Unlock()
+				case <-rl.closed:
+					timer.Stop()
+				}
+			}(msg.Key, msg.TTL)
 		}
 
 		counter.Count++
 
-		if counter.Count > rl.Limit {
+		// compara com o limit enviado na mensagem
+		if counter.Count > msg.Limit {
 			rl.mu.Unlock()
-			msg.ReplyChan <- errors.New("rate limit exceeded")
+			// excedeu
+			select {
+			case msg.ReplyChan <- errors.New("rate limit exceeded"):
+			default:
+			}
 			continue
 		}
 
 		rl.mu.Unlock()
 
-		msg.ReplyChan <- nil
+		// Tudo ok
+		select {
+		case msg.ReplyChan <- nil:
+		default:
+		}
 	}
-}
-
-func (rl *RateLimiter) Allow(key string) error {
-	reply := make(chan error)
-	rl.InputChan <- RateLimitMessage{
-		Key:       key,
-		ReplyChan: reply,
-	}
-	return <-reply
 }

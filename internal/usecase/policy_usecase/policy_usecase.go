@@ -18,8 +18,8 @@ type PolicyUsecaseInterface interface {
 
 type RateLimitStrategy interface {
 	GenerateKey(ctx context.Context, key string) (string, error)
-	Limit() int64
-	Window() time.Duration
+	GetLimit() int64
+	GetTTL() time.Duration
 }
 
 type InputPolicyDTO struct {
