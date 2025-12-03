@@ -1,0 +1,15 @@
+services:
+
+  redis:
+    container_name: redis
+    image: redis
+    ports:
+      - "6379:6379"
+      - "8443:8443"
+      - "12000:12000"
+    networks:
+      - app_rater
+
+networks:
+  app_rater:
+    driver: bridge

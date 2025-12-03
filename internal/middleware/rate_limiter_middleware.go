@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"net"
 	"net/http"
 
@@ -47,7 +46,6 @@ func RateLimiterMiddleware(policy *policy_usecase.PolicyUsecase, rl *ratelimiter
 			case rl.InputChan <- msg:
 				// wait reply
 				if err := <-reply; err != nil {
-					fmt.Println(err.Error())
 					http.Error(w, err.Error(), http.StatusTooManyRequests)
 					return
 				}

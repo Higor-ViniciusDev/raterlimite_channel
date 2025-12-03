@@ -5,6 +5,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/Higor-ViniciusDev/posgo_raterlimite/configuration/logger"
 )
 
 type RateLimitMessage struct {
@@ -55,6 +57,7 @@ func NewRateLimiter(workers int, queueSize int) *RateLimiter {
 
 // Stop fecha o rate limiter (fecha o canal de entrada).
 func (rl *RateLimiter) Stop() {
+	logger.Info("Canal encerrando")
 	close(rl.closed)
 	close(rl.InputChan)
 }
@@ -98,7 +101,6 @@ func (rl *RateLimiter) worker() {
 		}
 
 		counter.Count++
-
 		// compara com o limit enviado na mensagem
 		if counter.Count > msg.Limit {
 			rl.mu.Unlock()

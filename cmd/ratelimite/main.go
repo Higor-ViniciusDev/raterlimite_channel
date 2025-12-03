@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/Higor-ViniciusDev/posgo_raterlimite/configuration/database"
@@ -32,13 +33,15 @@ func main() {
 	tolkenController, policyUsecase := initDependeces(redis)
 
 	//rater limite 	middleware
-	raterLimite := ratelimiter.NewRateLimiter(5, 1000)
+	raterLimite := ratelimiter.NewRateLimiter(3, 100)
 
-	webServerPort := os.Getenv("WEB_SERVER_PORT")
+	webServerPort := os.Getenv("WEB_SERVER_PORTA")
 	webServer := web.NovoWebServer(fmt.Sprintf(":%v", webServerPort))
 
 	webServer.RegistrarRota("/tolken", tolkenController.CreateTolken, "POST")
-	webServer.RegistrarRota("/", nil, "GET", middleware.RateLimiterMiddleware(&policyUsecase, raterLimite))
+	webServer.RegistrarRota("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}, "GET", middleware.RateLimiterMiddleware(&policyUsecase, raterLimite))
 	webServer.IniciarWebServer()
 }
 

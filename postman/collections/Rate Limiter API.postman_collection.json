@@ -1,0 +1,410 @@
+{
+  "info": {
+    "_postman_id": "c0029bc5-5077-4b8e-94a3-a5b099f5025f",
+    "name": "Rate Limiter API",
+    "description": "API with token-based and IP-based rate limiting. Built with Go and Chi router, using Redis for token storage and rate limit tracking.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Token",
+      "id": "9f1309d1-a476-4c34-8685-04426928c012",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/tolken",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "tolken"
+          ]
+        },
+        "description": "Generates a new JWT token for API access. Token expires in 15 seconds and is stored in Redis."
+      },
+      "response": [
+        {
+          "id": "fd0c9c6a-7b6e-490e-a652-fe54cf9e3deb",
+          "name": "Success",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tolken",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tolken"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "_postman_previewtype": "html",
+          "body": "{\n  \"tolken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3MDk1NjQzMjB9.example\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Test Rate Limiter",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ============================================",
+              "// LOAD TEST PRE-REQUEST SCRIPT",
+              "// Rate: 15 requests/second for 10 seconds",
+              "// Total: 150 requests",
+              "// Delay: ~67ms between requests",
+              "// ============================================",
+              "",
+              "// Get current iteration (1-based in Collection Runner)",
+              "const currentIteration = pm.info.iteration + 1;",
+              "const totalIterations = 150;",
+              "",
+              "console.log(`\\n========== ITERATION ${currentIteration}/${totalIterations} ==========`);",
+              "",
+              "// Initialize counters on first iteration",
+              "if (currentIteration === 1) {",
+              "    console.log('🚀 Starting Load Test...');",
+              "    console.log('Configuration:');",
+              "    console.log('  - Target Rate: 15 requests/second');",
+              "    console.log('  - Duration: 10 seconds');",
+              "    console.log('  - Total Requests: 150');",
+              "    console.log('  - Delay between requests: ~67ms');",
+              "    console.log('');",
+              "    ",
+              "    // Initialize all tracking variables",
+              "    pm.collectionVariables.set('loadTest_successCount', 0);",
+              "    pm.collectionVariables.set('loadTest_rateLimitedCount', 0);",
+              "    pm.collectionVariables.set('loadTest_otherErrorCount', 0);",
+              "    pm.collectionVariables.set('loadTest_totalResponseTime', 0);",
+              "    pm.collectionVariables.set('loadTest_minResponseTime', 999999);",
+              "    pm.collectionVariables.set('loadTest_maxResponseTime', 0);",
+              "    pm.collectionVariables.set('loadTest_responseTimes', JSON.stringify([]));",
+              "    pm.collectionVariables.set('loadTest_statusCodes', JSON.stringify({}));",
+              "    pm.collectionVariables.set('loadTest_startTime', Date.now());",
+              "    pm.collectionVariables.set('loadTest_currentIteration', 1);",
+              "} else {",
+              "    pm.collectionVariables.set('loadTest_currentIteration', currentIteration);",
+              "}",
+              "",
+              "// Store request start time for accurate response time measurement",
+              "pm.collectionVariables.set('loadTest_requestStartTime', Date.now());",
+              "",
+              "console.log(`⏱️  Request ${currentIteration} starting at: ${new Date().toISOString()}`);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ============================================",
+              "// LOAD TEST POST-RESPONSE SCRIPT",
+              "// Tracks results and generates summary report",
+              "// ============================================",
+              "",
+              "const currentIteration = pm.info.iteration + 1;",
+              "const totalIterations = 150;",
+              "const responseTime = pm.response.responseTime;",
+              "const statusCode = pm.response.code;",
+              "",
+              "// Get current counters",
+              "let successCount = parseInt(pm.collectionVariables.get('loadTest_successCount')) || 0;",
+              "let rateLimitedCount = parseInt(pm.collectionVariables.get('loadTest_rateLimitedCount')) || 0;",
+              "let otherErrorCount = parseInt(pm.collectionVariables.get('loadTest_otherErrorCount')) || 0;",
+              "let totalResponseTime = parseInt(pm.collectionVariables.get('loadTest_totalResponseTime')) || 0;",
+              "let minResponseTime = parseInt(pm.collectionVariables.get('loadTest_minResponseTime')) || 999999;",
+              "let maxResponseTime = parseInt(pm.collectionVariables.get('loadTest_maxResponseTime')) || 0;",
+              "let responseTimes = JSON.parse(pm.collectionVariables.get('loadTest_responseTimes') || '[]');",
+              "let statusCodes = JSON.parse(pm.collectionVariables.get('loadTest_statusCodes') || '{}');",
+              "",
+              "// Update counters based on response",
+              "if (statusCode === 200) {",
+              "    successCount++;",
+              "    console.log(`✅ Request ${currentIteration}: SUCCESS (200) - ${responseTime}ms`);",
+              "} else if (statusCode === 429) {",
+              "    rateLimitedCount++;",
+              "    console.log(`🚫 Request ${currentIteration}: RATE LIMITED (429) - ${responseTime}ms`);",
+              "} else {",
+              "    otherErrorCount++;",
+              "    console.log(`❌ Request ${currentIteration}: ERROR (${statusCode}) - ${responseTime}ms`);",
+              "}",
+              "",
+              "// Track response times",
+              "totalResponseTime += responseTime;",
+              "minResponseTime = Math.min(minResponseTime, responseTime);",
+              "maxResponseTime = Math.max(maxResponseTime, responseTime);",
+              "responseTimes.push(responseTime);",
+              "",
+              "// Track status code distribution",
+              "statusCodes[statusCode] = (statusCodes[statusCode] || 0) + 1;",
+              "",
+              "// Save updated counters",
+              "pm.collectionVariables.set('loadTest_successCount', successCount);",
+              "pm.collectionVariables.set('loadTest_rateLimitedCount', rateLimitedCount);",
+              "pm.collectionVariables.set('loadTest_otherErrorCount', otherErrorCount);",
+              "pm.collectionVariables.set('loadTest_totalResponseTime', totalResponseTime);",
+              "pm.collectionVariables.set('loadTest_minResponseTime', minResponseTime);",
+              "pm.collectionVariables.set('loadTest_maxResponseTime', maxResponseTime);",
+              "pm.collectionVariables.set('loadTest_responseTimes', JSON.stringify(responseTimes));",
+              "pm.collectionVariables.set('loadTest_statusCodes', JSON.stringify(statusCodes));",
+              "",
+              "// ============================================",
+              "// TESTS",
+              "// ============================================",
+              "",
+              "pm.test('Response status is either 200 (OK) or 429 (Rate Limited)', function() {",
+              "    pm.expect(statusCode).to.be.oneOf([200, 429]);",
+              "});",
+              "",
+              "pm.test('Response time is reasonable (< 1000ms)', function() {",
+              "    pm.expect(responseTime).to.be.below(1000);",
+              "});",
+              "",
+              "// ============================================",
+              "// FINAL SUMMARY REPORT (on last iteration)",
+              "// ============================================",
+              "",
+              "if (currentIteration === totalIterations) {",
+              "    const startTime = parseInt(pm.collectionVariables.get('loadTest_startTime'));",
+              "    const endTime = Date.now();",
+              "    const totalDuration = (endTime - startTime) / 1000;",
+              "    const avgResponseTime = (totalResponseTime / totalIterations).toFixed(2);",
+              "    const actualRequestsPerSecond = (totalIterations / totalDuration).toFixed(2);",
+              "    const rateLimitEffectiveness = ((rateLimitedCount / totalIterations) * 100).toFixed(2);",
+              "    const successRate = ((successCount / totalIterations) * 100).toFixed(2);",
+              "    ",
+              "    // Calculate percentiles",
+              "    const sortedTimes = responseTimes.sort((a, b) => a - b);",
+              "    const p50Index = Math.floor(sortedTimes.length * 0.5);",
+              "    const p90Index = Math.floor(sortedTimes.length * 0.9);",
+              "    const p95Index = Math.floor(sortedTimes.length * 0.95);",
+              "    const p99Index = Math.floor(sortedTimes.length * 0.99);",
+              "    ",
+              "    console.log('');",
+              "    console.log('╔══════════════════════════════════════════════════════════════╗');",
+              "    console.log('║           🏁 LOAD TEST SUMMARY REPORT 🏁                     ║');",
+              "    console.log('╠══════════════════════════════════════════════════════════════╣');",
+              "    console.log('║ TEST CONFIGURATION                                           ║');",
+              "    console.log('╠══════════════════════════════════════════════════════════════╣');",
+              "    console.log(`║ Target Rate:          15 requests/second                     ║`);",
+              "    console.log(`║ Target Duration:      10 seconds                             ║`);",
+              "    console.log(`║ Total Requests:       ${totalIterations}                                       ║`);",
+              "    console.log('╠══════════════════════════════════════════════════════════════╣');",
+              "    console.log('║ ACTUAL RESULTS                                               ║');",
+              "    console.log('╠══════════════════════════════════════════════════════════════╣');",
+              "    console.log(`║ Actual Duration:      ${totalDuration.toFixed(2)} seconds`);",
+              "    console.log(`║ Actual Rate:          ${actualRequestsPerSecond} requests/second`);",
+              "    console.log('╠══════════════════════════════════════════════════════════════╣');",
+              "    console.log('║ REQUEST STATISTICS                                           ║');",
+              "    console.log('╠══════════════════════════════════════════════════════════════╣');",
+              "    console.log(`║ ✅ Successful (200):   ${successCount} requests (${successRate}%)`);",
+              "    console.log(`║ 🚫 Rate Limited (429): ${rateLimitedCount} requests (${rateLimitEffectiveness}%)`);",
+              "    console.log(`║ ❌ Other Errors:       ${otherErrorCount} requests`);",
+              "    console.log('╠══════════════════════════════════════════════════════════════╣');",
+              "    console.log('║ RESPONSE TIME ANALYSIS                                       ║');",
+              "    console.log('╠══════════════════════════════════════════════════════════════╣');",
+              "    console.log(`║ Average:              ${avgResponseTime}ms`);",
+              "    console.log(`║ Minimum:              ${minResponseTime}ms`);",
+              "    console.log(`║ Maximum:              ${maxResponseTime}ms`);",
+              "    console.log(`║ P50 (Median):         ${sortedTimes[p50Index]}ms`);",
+              "    console.log(`║ P90:                  ${sortedTimes[p90Index]}ms`);",
+              "    console.log(`║ P95:                  ${sortedTimes[p95Index]}ms`);",
+              "    console.log(`║ P99:                  ${sortedTimes[p99Index]}ms`);",
+              "    console.log('╠══════════════════════════════════════════════════════════════╣');",
+              "    console.log('║ STATUS CODE DISTRIBUTION                                     ║');",
+              "    console.log('╠══════════════════════════════════════════════════════════════╣');",
+              "    Object.keys(statusCodes).forEach(code => {",
+              "        const count = statusCodes[code];",
+              "        const percentage = ((count / totalIterations) * 100).toFixed(2);",
+              "        console.log(`║ Status ${code}:          ${count} requests (${percentage}%)`);",
+              "    });",
+              "    console.log('╠══════════════════════════════════════════════════════════════╣');",
+              "    console.log('║ RATE LIMITER EFFECTIVENESS                                   ║');",
+              "    console.log('╠══════════════════════════════════════════════════════════════╣');",
+              "    console.log(`║ Rate Limiting:        ${rateLimitEffectiveness}% of requests blocked`);",
+              "    if (rateLimitedCount > 0) {",
+              "        console.log('║ Status:               ✅ Rate limiter is WORKING');",
+              "    } else {",
+              "        console.log('║ Status:               ⚠️  No rate limiting detected');",
+              "    }",
+              "    console.log('╚══════════════════════════════════════════════════════════════╝');",
+              "    console.log('');",
+              "    ",
+              "    // Final test to verify rate limiter is working",
+              "    pm.test('Rate limiter is working (some 429 responses expected at 15 req/s)', function() {",
+              "        pm.expect(rateLimitedCount).to.be.above(0, 'Expected some requests to be rate limited at 15 req/s');",
+              "    });",
+              "    ",
+              "    pm.test('Load test completed all 150 iterations', function() {",
+              "        pm.expect(currentIteration).to.equal(totalIterations);",
+              "    });",
+              "    ",
+              "    // Clean up collection variables after test",
+              "    console.log('🧹 Cleaning up test variables...');",
+              "}"
+            ]
+          }
+        }
+      ],
+      "id": "dd0906ca-a560-4d2e-90e1-8db9069da599",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "API-KEY",
+            "value": "{{token}}",
+            "description": "Optional - JWT token for token-based rate limiting"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            ""
+          ]
+        },
+        "description": "Protected endpoint to test rate limiting. Use API-KEY header with token for token-based limiting (10 req/s), or omit for IP-based limiting (4 req/s)."
+      },
+      "response": [
+        {
+          "id": "33b93698-1edd-4065-b11d-f93223bfcf9a",
+          "name": "Success",
+          "originalRequest": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "API-KEY",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                ""
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "text",
+          "_postman_previewtype": "html",
+          "body": "OK"
+        },
+        {
+          "id": "d5d50be4-b336-4f9c-8b0d-640d89483829",
+          "name": "Rate Limited",
+          "originalRequest": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "API-KEY",
+                "value": "{{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                ""
+              ]
+            }
+          },
+          "status": "Too Many Requests",
+          "code": 429,
+          "_postman_previewlanguage": "text",
+          "_postman_previewtype": "html",
+          "body": "you have reached the maximum number of requests or actions allowed within a certain time frame"
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "id": "a77acc5d-9211-4f4c-8db2-ae85baca6dfc",
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "id": "16ad32a4-c3f7-43cd-beab-400f8c2922bc",
+      "key": "loadTest_successCount",
+      "value": ""
+    },
+    {
+      "id": "780658f1-b8f4-413e-b3f1-e1245b5a03d7",
+      "key": "loadTest_rateLimitedCount",
+      "value": ""
+    },
+    {
+      "id": "0dc2394a-bcc5-4448-bac4-856d5a51b235",
+      "key": "loadTest_otherErrorCount",
+      "value": ""
+    },
+    {
+      "id": "1bb79150-cd22-4068-95a1-6d5f0a7524d7",
+      "key": "loadTest_totalResponseTime",
+      "value": ""
+    },
+    {
+      "id": "2cdd1594-0acb-49b3-ab7e-695ef743ce0a",
+      "key": "loadTest_minResponseTime",
+      "value": ""
+    },
+    {
+      "id": "c24b8f1e-8ee1-49e8-a4f7-f8baaf004e19",
+      "key": "loadTest_maxResponseTime",
+      "value": ""
+    },
+    {
+      "id": "7cfdb723-96bc-4e67-9dbb-aca9a04805c7",
+      "key": "loadTest_responseTimes",
+      "value": ""
+    },
+    {
+      "id": "afcf3258-089f-4070-abb3-a90fdcb523d0",
+      "key": "loadTest_statusCodes",
+      "value": ""
+    },
+    {
+      "id": "1822f472-3749-49ee-9469-7d014c48e1c8",
+      "key": "loadTest_startTime",
+      "value": ""
+    },
+    {
+      "id": "2edb3147-eb4d-41f7-8e41-e41d20bd2d13",
+      "key": "loadTest_currentIteration",
+      "value": ""
+    },
+    {
+      "id": "e1fecdf0-c0b4-472d-bdf9-b21e81d5fed3",
+      "key": "loadTest_requestStartTime",
+      "value": ""
+    }
+  ]
+}
