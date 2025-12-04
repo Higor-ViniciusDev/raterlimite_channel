@@ -20,6 +20,7 @@ type RateLimitStrategy interface {
 	GenerateKey(ctx context.Context, key string) (string, error)
 	GetLimit() int64
 	GetTTL() time.Duration
+	GetPenaltyDuration() time.Duration
 }
 
 type InputPolicyDTO struct {

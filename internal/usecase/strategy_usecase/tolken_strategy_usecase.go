@@ -13,21 +13,25 @@ import (
 type TokenStrategyUsecase struct {
 	tokenRepo tolken_entity.TolkenRepositoryInterface
 
-	limitTok int64
-	window   time.Duration
+	limitTok      int64
+	window        time.Duration
+	PenalityBlock time.Duration
 }
 
 func NewTokenStrategyUsecase(tokenRepo tolken_entity.TolkenRepositoryInterface) *TokenStrategyUsecase {
 	limitStr := os.Getenv("REQUEST_PER_SECOND_TOLKEN")
-	ttlStr := os.Getenv("TIME_UNLOCKED_NEW_REQUEST_TOLKEN")
+	ttlStr := os.Getenv("TLL_KEY_TOLKEN")
+	penaltyStr := os.Getenv("PENALTY_BLOCK_TOLKEN")
 
 	limit, _ := strconv.ParseInt(limitStr, 10, 64)
 	ttl, _ := strconv.Atoi(ttlStr)
+	penalty, _ := strconv.Atoi(penaltyStr)
 
 	return &TokenStrategyUsecase{
-		tokenRepo: tokenRepo,
-		limitTok:  limit,
-		window:    time.Duration(ttl) * time.Second,
+		tokenRepo:     tokenRepo,
+		limitTok:      limit,
+		window:        time.Duration(ttl) * time.Second,
+		PenalityBlock: time.Duration(penalty) * time.Second,
 	}
 }
 
@@ -51,4 +55,8 @@ func (s *TokenStrategyUsecase) GetLimit() int64 {
 
 func (s *TokenStrategyUsecase) GetTTL() time.Duration {
 	return s.window
+}
+
+func (s *TokenStrategyUsecase) GetPenaltyDuration() time.Duration {
+	return s.PenalityBlock
 }

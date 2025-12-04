@@ -30,9 +30,11 @@ func NewTolken() *Tolken {
 }
 
 func (t *Tolken) GetTolkenString() (string, *internal_error.InternalError) {
+	// Numero aleatorio para o tolken sempre ser diferente
+	// Não tem uma key expire nele pois a validade do tolken é controlada pela aplicação
 	randomID := rand.Int63()
 	_, retorno, err := t.TokenAuth.Encode(map[string]interface{}{
-		"sub": randomID,
+		"randomID": randomID,
 	})
 
 	if err != nil {

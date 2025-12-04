@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/Higor-ViniciusDev/posgo_raterlimite/configuration/database"
 	"github.com/Higor-ViniciusDev/posgo_raterlimite/configuration/logger"
@@ -32,8 +33,14 @@ func main() {
 
 	tolkenController, policyUsecase := initDependeces(redis)
 
-	//rater limite 	middleware
-	raterLimite := ratelimiter.NewRateLimiter(3, 100)
+	wokers := os.Getenv("WORKERS_RATE_LIMITER")
+	bufferSize := os.Getenv("BUFFER_SIZE_RATE_LIMITER")
+
+	wokerNumber, _ := strconv.Atoi(wokers)
+	bufSizeNumber, _ := strconv.Atoi(bufferSize)
+
+	// RateLimiter
+	raterLimite := ratelimiter.NewRateLimiter(wokerNumber, bufSizeNumber)
 
 	webServerPort := os.Getenv("WEB_SERVER_PORTA")
 	webServer := web.NovoWebServer(fmt.Sprintf(":%v", webServerPort))

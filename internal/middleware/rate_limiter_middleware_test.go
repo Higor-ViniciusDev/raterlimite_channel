@@ -20,12 +20,13 @@ import (
 func Test_RateLimiterMiddleware_IP(t *testing.T) {
 	os.Setenv("TIME_UNLOCKED_NEW_REQUEST_IP", "1")
 	os.Setenv("REQUEST_PER_SECOND_IP", "7")
+	os.Setenv("TLL_KEY_IP", "5")
 
 	mr, _ := miniredis.Run()
 	redisClient := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	requestTolkenRepository := repository.NewTolkenDB(redisClient)
 
-	// Estratégias específicas
+	// mock usecases
 	ipStr := strategy_usecase.NewIPStrategyUsecase()
 	tokStr := strategy_usecase.NewTokenStrategyUsecase(requestTolkenRepository)
 
@@ -35,9 +36,10 @@ func Test_RateLimiterMiddleware_IP(t *testing.T) {
 		IPStrategy:    ipStr,
 	}
 
-	rl := ratelimiter.NewRateLimiter(4, 100)
+	// RateLimiter
+	rl := ratelimiter.NewRateLimiter(3, 500)
 
-	// --- Handler de teste ---
+	// Handler de teste ---
 	finalHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 	})
@@ -50,10 +52,10 @@ func Test_RateLimiterMiddleware_IP(t *testing.T) {
 
 	client := server.Client()
 
-	// --- Faz 20 requisições em 2 segundos (10 por segundo) ---
-	// Com limite de 5 requisições por segundo, deveria bloquear ~10 requisições
-	numRequests := 20
-	duration := 2 * time.Second
+	// --- Faz 500 requisições em 10 segundos ( por segundo) ---
+	// Com limite de 7 requisições por segundo, deveria bloquear ~ requisições
+	numRequests := 500
+	duration := 10 * time.Second
 	intervalPerRequest := duration / time.Duration(numRequests)
 
 	var mu sync.Mutex
