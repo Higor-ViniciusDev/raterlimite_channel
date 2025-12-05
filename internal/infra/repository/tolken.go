@@ -21,7 +21,7 @@ func NewTolkenDB(redisCli *redis.Client) *TolkenRepository {
 }
 
 func (tb *TolkenRepository) Save(ctx context.Context, tolken *tolken_entity.Tolken) *internal_error.InternalError {
-	tolkenID, _ := tolken.GetTolkenString()
+	tolkenID := tolken.GetTolkenString()
 	// Converter struct para map (Redis não aceita struct)
 	data := map[string]interface{}{
 		"ttl":      tolken.TimeLife,
@@ -53,6 +53,7 @@ func (tb *TolkenRepository) ValidateTolken(ctx context.Context, tolkenID string)
 
 func (tb *TolkenRepository) DeleteInfoByTolken(ctx context.Context, tolkenID string) *internal_error.InternalError {
 	err := tb.RediDB.Del(ctx, tolkenID).Err()
+	logger.Info("chegou deletando key: " + tolkenID)
 	if err != nil {
 		logger.Error("Error try delete hkey in redis", err)
 		return internal_error.NewInternalServerError("Error try delete key")

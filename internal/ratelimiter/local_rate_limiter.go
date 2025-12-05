@@ -2,13 +2,13 @@ package ratelimiter
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/Higor-ViniciusDev/posgo_raterlimite/configuration/logger"
 	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/internal_error"
+	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/usecase/policy_usecase"
 )
 
 type RateLimitMessage struct {
@@ -16,8 +16,8 @@ type RateLimitMessage struct {
 	Key       string
 	Limit     int64
 	TTL       time.Duration
-	Strategy  interface{}
-	ReplyChan chan error
+	Strategy  policy_usecase.RateLimitStrategy
+	ReplyChan chan *internal_error.InternalError
 }
 
 // Counter guarda o contador em memória.
@@ -84,7 +84,7 @@ func (rl *RateLimiter) worker() {
 		select {
 		case <-rl.closed:
 			select {
-			case msg.ReplyChan <- errors.New("rate limiter shutting down"):
+			case msg.ReplyChan <- internal_error.NewInternalServerError("server shutdown"):
 			default:
 			}
 			return
@@ -130,14 +130,13 @@ func (rl *RateLimiter) worker() {
 		counter.Count++
 		// compara com o limit enviado na mensagem
 		if counter.Count > msg.Limit {
-			rl.mu.Unlock()
 			//Se bloquear request, adicionar penalidade de timer para o bloqueio temporario
 			if counter.BlockedUntil.Before(time.Now()) {
 				counter.BlockedUntil = time.Now().Add(1 * time.Minute) // bloqueia por 1 minuto
 			}
 
 			logger.Info(fmt.Sprintf("Rate limit exceeded for key: %s", msg.Key))
-
+			rl.mu.Unlock()
 			// excedeu
 			select {
 			case msg.ReplyChan <- internal_error.NewManyRequestError("you have reached the maximum number of requests or actions allowed within a certain time frame"):
@@ -152,6 +151,9 @@ func (rl *RateLimiter) worker() {
 		select {
 		case msg.ReplyChan <- nil:
 		default:
+		}
+		if err := msg.Strategy.SaveRequestInfo(context.Background(), msg.Key); err != nil {
+			logger.Error("erro ao salvar request info", err)
 		}
 	}
 }

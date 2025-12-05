@@ -12,9 +12,10 @@ import (
 )
 
 type Tolken struct {
-	JWTSecret string
-	TokenAuth *jwtauth.JWTAuth
-	TimeLife  int64
+	JWTSecret    string
+	TokenAuth    *jwtauth.JWTAuth
+	TimeLife     int
+	TolkenString string
 }
 
 func NewTolken() *Tolken {
@@ -22,14 +23,20 @@ func NewTolken() *Tolken {
 	tll := os.Getenv("TOLKEN_EXPIRATION")
 	tllNumber, _ := strconv.Atoi(tll)
 
-	return &Tolken{
+	tolkenEntity := &Tolken{
 		JWTSecret: secret,
 		TokenAuth: jwtauth.New("HS256", []byte(secret), nil),
-		TimeLife:  int64(tllNumber),
+		TimeLife:  tllNumber,
 	}
+	tolkenEntity.SetTolkenString()
+	return tolkenEntity
 }
 
-func (t *Tolken) GetTolkenString() (string, *internal_error.InternalError) {
+func (t *Tolken) GetTolkenString() string {
+	return t.TolkenString
+}
+
+func (t *Tolken) SetTolkenString() {
 	// Numero aleatorio para o tolken sempre ser diferente
 	// Não tem uma key expire nele pois a validade do tolken é controlada pela aplicação
 	randomID := rand.Int63()
@@ -39,10 +46,10 @@ func (t *Tolken) GetTolkenString() (string, *internal_error.InternalError) {
 
 	if err != nil {
 		logger.Error("error getstring tolken ", err)
-		return "", internal_error.NewInternalServerError("Error get tolken string")
+		return
 	}
 
-	return retorno, nil
+	t.TolkenString = retorno
 }
 
 type TolkenRepositoryInterface interface {

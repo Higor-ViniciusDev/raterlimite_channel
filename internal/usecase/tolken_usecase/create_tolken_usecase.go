@@ -31,13 +31,9 @@ type TolkenUsecaseInterface interface {
 
 func (tl *TolkenUsecase) CreateTolken(ctx context.Context) (*TolkenOutputDTO, *internal_error.InternalError) {
 	tolkenEntity := tolken_entity.NewTolken()
-	tolkenString, err := tolkenEntity.GetTolkenString()
+	tolkenString := tolkenEntity.GetTolkenString()
 
-	if err != nil {
-		return nil, err
-	}
-
-	err = tl.TolkenRepository.Save(ctx, tolkenEntity)
+	err := tl.TolkenRepository.Save(ctx, tolkenEntity)
 
 	if err != nil {
 		return nil, err

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/internal_error"
 	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/usecase/strategy_usecase"
 )
 
@@ -17,10 +18,12 @@ type PolicyUsecaseInterface interface {
 }
 
 type RateLimitStrategy interface {
-	GenerateKey(ctx context.Context, key string) (string, error)
+	GenerateKey(ctx context.Context, key string) (string, *internal_error.InternalError)
 	GetLimit() int64
 	GetTTL() time.Duration
 	GetPenaltyDuration() time.Duration
+	SaveRequestInfo(ctx context.Context, key string) *internal_error.InternalError
+	GetInfoType() string
 }
 
 type InputPolicyDTO struct {

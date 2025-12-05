@@ -25,6 +25,14 @@ const (
 	FONTE_TOLKEN = "TOLKEN"
 )
 
+func NewRequestInfo(key string, status RequestCondition, fontePolicy string) *RequestInfo {
+	return &RequestInfo{
+		Key:         key,
+		Status:      status,
+		FontePolicy: fontePolicy,
+	}
+}
+
 type RequestRepository interface {
 	Save(ctx context.Context, key string, status RequestCondition, tipoRequest string) *internal_error.InternalError
 }

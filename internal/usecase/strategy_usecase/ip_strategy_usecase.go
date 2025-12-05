@@ -6,33 +6,36 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/entity/request_info_entity"
 	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/internal_error"
 )
 
 type IPStrategyUsecase struct {
-	limitIP       int64
-	window        time.Duration
-	PenalityBlock time.Duration
+	limitIP           int64
+	window            time.Duration
+	PenalityBlock     time.Duration
+	RequestRepository request_info_entity.RequestRepository
 }
 
-func NewIPStrategyUsecase() *IPStrategyUsecase {
+func NewIPStrategyUsecase(requestRepository request_info_entity.RequestRepository) *IPStrategyUsecase {
 
 	limitStr := os.Getenv("REQUEST_PER_SECOND_IP")
 	ttlStr := os.Getenv("TLL_KEY_IP")
-	timePenalityStr := os.Getenv("PENALITY_BLOCK_IP")
+	timePenalityStr := os.Getenv("TIME_UNLOCKED_NEW_REQUEST_IP")
 
 	limit, _ := strconv.ParseInt(limitStr, 10, 64)
 	ttl, _ := strconv.Atoi(ttlStr)
 	penality, _ := strconv.Atoi(timePenalityStr)
 
 	return &IPStrategyUsecase{
-		limitIP:       limit,
-		window:        time.Duration(ttl) * time.Second,
-		PenalityBlock: time.Duration(penality) * time.Second,
+		limitIP:           limit,
+		window:            time.Duration(ttl) * time.Second,
+		PenalityBlock:     time.Duration(penality) * time.Second,
+		RequestRepository: requestRepository,
 	}
 }
 
-func (s *IPStrategyUsecase) GenerateKey(ctx context.Context, key string) (string, error) {
+func (s *IPStrategyUsecase) GenerateKey(ctx context.Context, key string) (string, *internal_error.InternalError) {
 
 	if key == "" {
 		return "", internal_error.NewBadRequestError("key invalid")
@@ -51,4 +54,13 @@ func (s *IPStrategyUsecase) GetTTL() time.Duration {
 
 func (s *IPStrategyUsecase) GetPenaltyDuration() time.Duration {
 	return s.PenalityBlock
+}
+
+func (s *IPStrategyUsecase) GetInfoType() string {
+	return "IP"
+}
+
+func (s *IPStrategyUsecase) SaveRequestInfo(ctx context.Context, key string) *internal_error.InternalError {
+	newRequest := request_info_entity.NewRequestInfo(key, request_info_entity.Active, s.GetInfoType())
+	return s.RequestRepository.Save(ctx, key, newRequest.Status, newRequest.FontePolicy)
 }

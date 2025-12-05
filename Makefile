@@ -21,62 +21,60 @@ help:
 # Teste IP: 20 requisições em 2 segundos (10 req/s)
 # Esperado: 10 sucesso, 10 bloqueadas (limite: 5 req/s × 2s = 10 total)
 test-ip:
-	@echo "🧪 Testando Rate Limit por IP..."
+	@echo "- Testando Rate Limit por IP..."
 	@echo "Configuração: 10 req/s por 2 segundos"
 	@echo "Esperado: ~10 sucesso (200), ~10 bloqueadas (429)"
-	@vegeta attack -targets=targets-ip.txt -rate=10 -duration=3s -output=results-ip.bin
-	@echo "\n📊 Relatório:"
+	@vegeta attack -targets=targets-ip.txt -rate=10 -duration=2s -output=results-ip.bin
+	@echo "\n- Relatório:"
 	@vegeta report results-ip.bin
-	@vegeta report results-ip.bin -type=json | jq '{success: .status_codes."200", blocked: .status_codes."429", total: .requests}'
 
-# Teste Token: 150 requisições em 10 segundos (15 req/s)
-# Esperado: 100 sucesso, 50 bloqueadas (limite: 10 req/s × 10s = 100 total)
+# Teste 4: Token com taxa alta
+# COMPORTAMENTO CORRETO:
+# - Limite: 10 req/s
+# - TTL da key: 1s (contador reseta a cada segundo)
+# - Taxa de envio: 15 req/s por 10 segundos = 150 requisições total
+# - A cada segundo: primeiras 10 req passam, próximas 5 bloqueadas
+# - 6ª requisição de cada segundo ATIVA penalidade de 10s
+# - Durante penalidade: TUDO bloqueado
+# 
+# Esperado (SEM considerar penalidade acumulativa):
+# - Por segundo: 10 sucesso + 5 bloqueadas
+# - Em 10 segundos: ~100 sucesso, ~50 bloqueadas
+# 
+# Esperado REAL (COM penalidade):
+# - 1º segundo: 10 sucesso + 5 bloqueadas (ativa penalidade 10s)
+# - 2º-10º segundo: TUDO bloqueado (penalidade ativa)
+# - Resultado: ~10-15 sucesso, ~135-140 bloqueadas
 test-token:
-	@echo "🧪 Testando Rate Limit por Token..."
-	@echo "Configuração: 15 req/s por 10 segundos"
-	@echo "Esperado: ~100 sucesso (200), ~50 bloqueadas (429)"
-	@echo "⚠️  Primeiro, crie um token:"
-	@curl -s -X POST http://localhost:8080/tolken | jq -r '.tolken' > .token
-	@echo "Token criado: $$(cat .token)"
+	@echo "-Testando Rate Limit por Token..."
+	@echo "   - Limite: 10 req/s"
+	@echo "   - TTL key: 1s (sliding window)"
+	@echo "   - Penalidade: 10s (ao exceder)"
+	@echo "   - Taxa envio: 15 req/s"
+	@echo "   - Duracao: 10 segundos"
+	@echo "   - Total: 150 requisicoes"
+	@echo ""
+	@echo "- Criando token..."
+	@powershell -Command "$$response = Invoke-RestMethod -Method Post 'http://localhost:8080/tolken'; $$response.tolken" > .token
+	@powershell -Command "$$token = Get-Content .token -Raw; $$token = $$token.Trim(); Write-Host \"   Token criado: $$token\""
+	@echo ""
+	@echo "- Criando arquivo de targets com token..."
+	@powershell -Command "$$token = (Get-Content .token -Raw).Trim(); $$content = \"GET http://localhost:8080/`nAPI-KEY: $$token`n\"; Set-Content -Path targets-token.txt -Value $$content -NoNewline"
+	@echo "   Arquivo targets-token.txt criado"
+	@echo ""
+	@echo "- Executando teste de carga..."
+	@echo "   COMPORTAMENTO ESPERADO:"
+	@echo "   1. Primeiro segundo: 10 OK + 5 bloqueadas"
+	@echo "   2. 6a requisicao ATIVA penalidade de 10s"
+	@echo "   3. Proximos 9s: TUDO bloqueado"
+	@echo "   Resultado: ~10-15 sucesso, ~135-140 bloqueadas"
+	@echo ""
 	@vegeta attack -targets=targets-token.txt -rate=15 -duration=10s -output=results-token.bin
-	@echo "\n📊 Relatório:"
+	@echo ""
+	@echo "- Relatorio:"
 	@vegeta report results-token.bin
-	@vegeta report results-token.bin -type=json | jq '{success: .status_codes."200", blocked: .status_codes."429", total: .requests}'
-
-# Teste de Stress IP: 250 requisições em 5 segundos (50 req/s)
-test-ip-stress:
-	@echo "🔥 Teste de STRESS por IP..."
-	@echo "Configuração: 50 req/s por 5 segundos"
-	@vegeta attack -targets=targets-ip.txt -rate=50 -duration=5s -output=results-ip-stress.bin
-	@vegeta report results-ip-stress.bin
-	@vegeta plot results-ip-stress.bin > plot-ip-stress.html
-	@echo "Gráfico salvo em: plot-ip-stress.html"
-
-# Teste de Stress Token: 300 requisições em 10 segundos (30 req/s)
-test-token-stress:
-	@echo "🔥 Teste de STRESS por Token..."
-	@curl -s -X POST http://localhost:8080/tolken | jq -r '.tolken' > .token
-	@vegeta attack -targets=targets-token.txt -rate=30 -duration=10s -output=results-token-stress.bin
-	@vegeta report results-token-stress.bin
-	@vegeta plot results-token-stress.bin > plot-token-stress.html
-	@echo "Gráfico salvo em: plot-token-stress.html"
-
-# Analisa todos os resultados
-analyze:
-	@echo "📊 Análise Completa dos Testes\n"
-	@if [ -f results-ip.bin ]; then \
-		echo "=== Teste IP Normal ==="; \
-		vegeta report results-ip.bin -type=json | jq '{success: .status_codes."200", blocked: .status_codes."429", success_rate: .success_ratio, latency_p99: .latencies.p99}'; \
-	fi
-	@if [ -f results-token.bin ]; then \
-		echo "\n=== Teste Token Normal ==="; \
-		vegeta report results-token.bin -type=json | jq '{success: .status_codes."200", blocked: .status_codes."429", success_rate: .success_ratio, latency_p99: .latencies.p99}'; \
-	fi
-
+	@echo ""
+	
 # Limpa arquivos de resultado
 clean:
 	rm -f results*.bin plot*.html .token report.json
-
-# Teste completo: IP + Token
-test-all: test-ip test-token analyze
-	@echo "✅ Todos os testes concluídos!"

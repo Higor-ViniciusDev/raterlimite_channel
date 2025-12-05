@@ -4,6 +4,8 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/Higor-ViniciusDev/posgo_raterlimite/configuration/rest_err"
+	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/internal_error"
 	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/ratelimiter"
 	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/usecase/policy_usecase"
 )
@@ -28,17 +30,19 @@ func RateLimiterMiddleware(policy *policy_usecase.PolicyUsecase, rl *ratelimiter
 			// generate key (token strategy may validate token)
 			key, err := strategy.GenerateKey(r.Context(), key)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusUnauthorized)
+				restError := rest_err.ConvertInternalErrorToRestError(err)
+				http.Error(w, restError.Message, restError.Code)
 				return
 			}
 
-			reply := make(chan error, 1)
+			reply := make(chan *internal_error.InternalError, 1)
 			msg := ratelimiter.RateLimitMessage{
 				Ctx:       r.Context(),
 				Key:       key,
 				Limit:     strategy.GetLimit(),
 				TTL:       strategy.GetTTL(),
 				ReplyChan: reply,
+				Strategy:  strategy,
 			}
 
 			// send to rate limiter
@@ -46,7 +50,8 @@ func RateLimiterMiddleware(policy *policy_usecase.PolicyUsecase, rl *ratelimiter
 			case rl.InputChan <- msg:
 				// wait reply
 				if err := <-reply; err != nil {
-					http.Error(w, err.Error(), http.StatusTooManyRequests)
+					restError := rest_err.ConvertInternalErrorToRestError(err)
+					http.Error(w, restError.Message, restError.Code)
 					return
 				}
 			case <-r.Context().Done():
