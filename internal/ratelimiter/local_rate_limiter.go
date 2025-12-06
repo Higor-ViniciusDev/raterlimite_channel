@@ -24,6 +24,7 @@ type RateLimitMessage struct {
 type Counter struct {
 	Count        int64
 	BlockedUntil time.Time
+	KeyCreatedAt time.Time
 }
 
 type RateLimiter struct {
@@ -36,14 +37,6 @@ type RateLimiter struct {
 }
 
 func NewRateLimiter(workers int, queueSize int) *RateLimiter {
-	if workers <= 0 {
-		workers = 2
-	}
-
-	if queueSize <= 0 {
-		queueSize = 1000
-	}
-
 	rl := &RateLimiter{
 		workers:   workers,
 		InputChan: make(chan RateLimitMessage, queueSize),
@@ -94,28 +87,10 @@ func (rl *RateLimiter) worker() {
 		rl.mu.Lock()
 
 		counter, exists := rl.requests[msg.Key]
-		if !exists {
-			counter = &Counter{
-				Count: 0,
-			}
-			rl.requests[msg.Key] = counter
+		now := time.Now()
 
-			go func(key string, ttl time.Duration) {
-				// timer local para limpeza ttl key
-				timer := time.NewTimer(ttl)
-				select {
-				case <-timer.C:
-					rl.mu.Lock()
-					delete(rl.requests, key)
-					rl.mu.Unlock()
-				case <-rl.closed:
-					timer.Stop()
-				}
-			}(msg.Key, msg.TTL)
-		}
-
-		// Verifica se está bloqueado
-		if counter.BlockedUntil.After(time.Now()) {
+		// Verifica se existe chafe e se está bloqueado com base no blockedUntil e no tempo atual
+		if exists && !counter.BlockedUntil.IsZero() && now.Before(counter.BlockedUntil) {
 			rl.mu.Unlock()
 
 			// Avisar que o limite foi excedido
@@ -127,12 +102,60 @@ func (rl *RateLimiter) worker() {
 			continue
 		}
 
+		if !exists {
+			counter = &Counter{
+				Count: 0,
+			}
+			rl.requests[msg.Key] = counter
+
+			go func(key string, ttl time.Duration, penality time.Duration) {
+				maxTime := ttl
+				if penality > maxTime {
+					maxTime = penality
+				}
+				maxTime += 1 * time.Second // Buffer seguranca caso a key ainda esteja em uso após um segundo que foi definido
+
+				timer := time.NewTimer(maxTime)
+				select {
+				case <-timer.C:
+					rl.mu.Lock()
+					if c, ok := rl.requests[key]; ok {
+						now := time.Now()
+						// Verifica se o contador ainda está expirado antes de deletar
+						penalityExpired := c.BlockedUntil.IsZero() || now.After(c.BlockedUntil)
+						tllExpired := now.Sub(c.KeyCreatedAt) > ttl
+
+						if penalityExpired && tllExpired {
+							delete(rl.requests, key)
+						}
+					}
+					rl.mu.Unlock()
+				case <-rl.closed:
+					timer.Stop()
+				}
+			}(msg.Key, msg.TTL, msg.Strategy.GetPenaltyDuration())
+		} else {
+			// Se o contador existir, mas o bloqueio expirou, resetar o contador
+			penalityExpired := counter.BlockedUntil.IsZero() || now.After(counter.BlockedUntil)
+			tllExpired := now.Sub(counter.KeyCreatedAt) > msg.TTL
+
+			if penalityExpired && tllExpired {
+				// Se ambos expiraram, resetar o contador e o bloqueio
+				counter.Count = 0
+				counter.BlockedUntil = time.Time{}
+				counter.KeyCreatedAt = now
+			} else if penalityExpired && !tllExpired {
+				// Se o bloqueio expirou, mas o TTL não, apenas resetar o bloqueio
+				counter.BlockedUntil = time.Time{}
+			}
+		}
+
 		counter.Count++
 		// compara com o limit enviado na mensagem
-		if counter.Count > msg.Limit {
+		if counter.Count >= msg.Limit {
 			//Se bloquear request, adicionar penalidade de timer para o bloqueio temporario
-			if counter.BlockedUntil.Before(time.Now()) {
-				counter.BlockedUntil = time.Now().Add(1 * time.Minute) // bloqueia por 1 minuto
+			if counter.BlockedUntil.IsZero() {
+				counter.BlockedUntil = now.Add(msg.Strategy.GetPenaltyDuration())
 			}
 
 			logger.Info(fmt.Sprintf("Rate limit exceeded for key: %s", msg.Key))
@@ -152,6 +175,7 @@ func (rl *RateLimiter) worker() {
 		case msg.ReplyChan <- nil:
 		default:
 		}
+		//Para fins de info, apenas salvar os que deram sucesso é requisito do projeto
 		if err := msg.Strategy.SaveRequestInfo(context.Background(), msg.Key); err != nil {
 			logger.Error("erro ao salvar request info", err)
 		}

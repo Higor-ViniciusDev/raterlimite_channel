@@ -33,8 +33,8 @@ func main() {
 
 	tolkenController, policyUsecase := initDependeces(redis)
 
-	wokers := os.Getenv("WORKERS_RATE_LIMITER")
-	bufferSize := os.Getenv("BUFFER_SIZE_RATE_LIMITER")
+	wokers := os.Getenv("WORKER_POOL_SIZE")
+	bufferSize := os.Getenv("SIZE_BUFFER_CHANNEL")
 
 	wokerNumber, _ := strconv.Atoi(wokers)
 	bufSizeNumber, _ := strconv.Atoi(bufferSize)

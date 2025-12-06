@@ -6,8 +6,8 @@ require (
 	github.com/alicebob/miniredis v2.5.0+incompatible
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-chi/jwtauth v1.2.0
-	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/joho/godotenv v1.5.1
+	github.com/realclientip/realclientip-go v1.0.0
 	github.com/redis/go-redis/v9 v9.17.2
 	go.uber.org/zap v1.27.1
 )
@@ -23,8 +23,6 @@ require (
 	github.com/lestrrat-go/iter v1.0.0 // indirect
 	github.com/lestrrat-go/jwx v1.1.0 // indirect
 	github.com/lestrrat-go/option v1.0.0 // indirect
-	github.com/onsi/ginkgo v1.16.5 // indirect
-	github.com/onsi/gomega v1.38.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.uber.org/multierr v1.10.0 // indirect

@@ -3,6 +3,7 @@ package middleware
 import (
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/Higor-ViniciusDev/posgo_raterlimite/configuration/rest_err"
 	"github.com/Higor-ViniciusDev/posgo_raterlimite/internal/internal_error"
@@ -15,15 +16,41 @@ import (
 func RateLimiterMiddleware(policy *policy_usecase.PolicyUsecase, rl *ratelimiter.RateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var trueClientIP = http.CanonicalHeaderKey("True-Client-IP")
+			var xForwardedFor = http.CanonicalHeaderKey("X-Forwarded-For")
+			var xRealIP = http.CanonicalHeaderKey("X-Real-IP")
 
 			// monta input
 			var input policy_usecase.InputPolicyDTO
 			if api := r.Header.Get("API-KEY"); api != "" {
 				input.Tolken = api
 			}
-			ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-			input.IP = ip
 
+			//Exemplo tirado do middleware https://github.com/go-chi/chi/blob/master/middleware/realip.go
+			var ip string
+
+			if tcip := r.Header.Get(trueClientIP); tcip != "" {
+				ip = tcip
+			} else if xrip := r.Header.Get(xRealIP); xrip != "" {
+				ip = xrip
+			} else if xff := r.Header.Get(xForwardedFor); xff != "" {
+				ip, _, _ = strings.Cut(xff, ",")
+			} else if host := r.RemoteAddr; host != "" {
+				ip = host
+			}
+
+			if strings.Contains(ip, ":") {
+				host, _, err := net.SplitHostPort(ip)
+				if err == nil {
+					ip = host
+				}
+			}
+
+			if ip == "" || net.ParseIP(ip) == nil {
+				input.IP = ""
+			} else {
+				input.IP = net.ParseIP(ip).String()
+			}
 			// resolve strategy
 			strategy, key := policy.Resolver(input)
 
